@@ -175,6 +175,19 @@ export function loadOrCreateDailyBounties(): DailyBounty[] {
       rewardItemName: 'ไฟฉาย UV ส่องคำตอบ',
       claimed: false,
     },
+    {
+      id: 'bounty-streak-3',
+      title: 'ผู้ชำระล้างคำสาประดับเซียน',
+      description: 'ตอบถูกสะกดวิญญาณต่อเนื่อง (Streak) ถึง 3 ครั้ง',
+      emoji: '⚡',
+      target: 3,
+      current: 0,
+      rewardExp: 150,
+      rewardScore: 250,
+      rewardItem: 'holy_water',
+      rewardItemName: 'น้ำมนต์สะกดวิญญาณ x2',
+      claimed: false,
+    },
   ];
 
   try {
@@ -195,15 +208,20 @@ export function saveDailyBounties(bounties: DailyBounty[]) {
 // ==========================================
 // THAI GHOST TEXT-TO-SPEECH (สังเคราะห์เสียงผี)
 // ==========================================
-export function speakGhostVoice(text: string, onEnd?: () => void): boolean {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+let activeGhostAudio: HTMLAudioElement | null = null;
 
+function speakWithSpeechSynthesis(text: string, onEnd?: () => void) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    onEnd?.();
+    return;
+  }
   try {
-    window.speechSynthesis.cancel(); // Stop any pending utterances
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'th-TH';
-    utterance.pitch = 0.65; // deep haunting tone
-    utterance.rate = 0.88; // mysterious slow speed
+    utterance.pitch = 0.7; // deep ghostly tone
+    utterance.rate = 0.9;
     utterance.volume = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
@@ -212,20 +230,65 @@ export function speakGhostVoice(text: string, onEnd?: () => void): boolean {
       utterance.voice = thVoice;
     }
 
-    if (onEnd) {
-      utterance.onend = onEnd;
-      utterance.onerror = onEnd;
-    }
-
+    utterance.onend = () => onEnd?.();
+    utterance.onerror = () => onEnd?.();
     window.speechSynthesis.speak(utterance);
-    return true;
   } catch {
-    return false;
+    onEnd?.();
+  }
+}
+
+export function speakGhostVoice(text: string, onEnd?: () => void): boolean {
+  if (typeof window === 'undefined') return false;
+
+  stopGhostVoice();
+
+  // Try pristine server-side Thai TTS endpoint first (compatible with ALL browsers & platforms)
+  try {
+    const audioUrl = `/api/tts?text=${encodeURIComponent(text.trim())}`;
+    const audio = new Audio(audioUrl);
+    audio.playbackRate = 0.92; // haunting, eerie cadence
+    activeGhostAudio = audio;
+
+    audio.onended = () => {
+      activeGhostAudio = null;
+      onEnd?.();
+    };
+
+    audio.onerror = () => {
+      activeGhostAudio = null;
+      // Fallback to Web Speech API
+      speakWithSpeechSynthesis(text, onEnd);
+    };
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn('Audio play failed, falling back to speech synthesis:', err);
+        activeGhostAudio = null;
+        speakWithSpeechSynthesis(text, onEnd);
+      });
+    }
+    return true;
+  } catch (err) {
+    console.warn('Direct audio creation failed:', err);
+    speakWithSpeechSynthesis(text, onEnd);
+    return true;
   }
 }
 
 export function stopGhostVoice() {
+  if (activeGhostAudio) {
+    try {
+      activeGhostAudio.pause();
+      activeGhostAudio.currentTime = 0;
+    } catch {}
+    activeGhostAudio = null;
+  }
+
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {}
   }
 }

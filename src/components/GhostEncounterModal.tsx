@@ -10,7 +10,7 @@ interface GhostEncounterModalProps {
   encounter: GhostEncounter | null;
   isOpen: boolean;
   onClose: () => void;
-  onExorcised: (encounter: GhostEncounter, attempts: number) => void;
+  onExorcised: (encounter: GhostEncounter, attempts: number, isDoubleReward?: boolean) => void;
   onFailed?: () => void;
   timedMode?: boolean;
   inventory?: PlayerInventory;
@@ -25,7 +25,7 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
   onExorcised,
   onFailed,
   timedMode = true,
-  inventory = { talisman: 1, hourglass: 1, uv_light: 1 },
+  inventory = { talisman: 1, hourglass: 1, uv_light: 1, holy_water: 1, salt_barrier: 1 },
   onUseItem,
   onOpenPolaroid,
 }) => {
@@ -41,6 +41,8 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
   const [hintMessage, setHintMessage] = useState<string | null>(null);
   const [isJumpscareActive, setIsJumpscareActive] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isHolyWaterActive, setIsHolyWaterActive] = useState(false);
+  const [isSaltBarrierActive, setIsSaltBarrierActive] = useState(false);
   const isProcessedRef = useRef(false);
 
   const triggerJumpscare = () => {
@@ -70,6 +72,8 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
       setTimeLeft(60);
       setShowHint(false);
       setHintMessage(null);
+      setIsHolyWaterActive(false);
+      setIsSaltBarrierActive(false);
       isProcessedRef.current = false;
       
       // Trigger encounter revelation jumpscare
@@ -89,6 +93,7 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
     }
     if (encounter?.narrative) {
       setIsSpeaking(true);
+      sounds.playGhostWhisper();
       speakGhostVoice(encounter.narrative, () => setIsSpeaking(false));
     }
   };
@@ -96,27 +101,29 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
   // Timer countdown if timed mode is enabled and not answered
   useEffect(() => {
     if (!isOpen || !timedMode || isAnswered || isTimedOut) return;
-    if (timeLeft <= 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setIsTimedOut(true);
-          sounds.playGhostAnger();
-          onFailed?.();
-          return 0;
-        }
+        const next = prev - 1;
         // Heartbeat tension when time is running out (under 15s)
-        if (prev <= 15) {
-          sounds.playHeartbeat(prev <= 6 ? 1.4 : 0.9);
+        if (next <= 15 && next > 0) {
+          sounds.playHeartbeat(next <= 6 ? 1.4 : 0.9);
         }
-        return prev - 1;
+        return Math.max(0, next);
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isOpen, timedMode, isAnswered, isTimedOut, timeLeft, onFailed]);
+  }, [isOpen, timedMode, isAnswered, isTimedOut]);
+
+  // Handle timeout event cleanly outside state updater
+  useEffect(() => {
+    if (isOpen && timedMode && timeLeft === 0 && !isTimedOut && !isAnswered) {
+      setIsTimedOut(true);
+      sounds.playGhostAnger();
+      onFailed?.();
+    }
+  }, [timeLeft, isOpen, timedMode, isTimedOut, isAnswered, onFailed]);
 
   if (!isOpen || !encounter) return null;
 
@@ -131,8 +138,11 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
       isProcessedRef.current = true;
       setIsAnswered(true);
       setIsCorrect(true);
-      // Play exorcism purification bell + sparkle
+      // Play exorcism purification bell + sparkle + voice
       sounds.playPurifySuccess();
+      setTimeout(() => {
+        sounds.playGhostVoicePurified();
+      }, 700);
 
       // Confetti celebration
       confetti({
@@ -142,10 +152,18 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
         colors: ['#34d399', '#38bdf8', '#fbbf24', '#f43f5e', '#a855f7'],
       });
 
-      onExorcised(encounter, newAttempts);
+      onExorcised(encounter, newAttempts, isHolyWaterActive);
     } else {
       sounds.playWrongAnswer();
+      setTimeout(() => {
+        sounds.playGhostVoiceWrong();
+      }, 500);
       setWrongChoices((prev) => [...prev, choice]);
+      if (isSaltBarrierActive) {
+        setHintMessage('🧂 ม่านเกลือศักดิ์สิทธิ์ปกป้องสตรีคของคุณไว้ ไม่ให้สูญหาย!');
+      } else if (onFailed) {
+        onFailed();
+      }
     }
   };
 
@@ -157,7 +175,7 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
       return;
     }
     if (onUseItem && onUseItem('talisman')) {
-      sounds.playItemUse();
+      sounds.playTalismanBurn();
       // Eliminate up to 2 wrong choices safely comparing numbers
       const wrongAvailable = encounter.choices.filter(
         (c) => Number(c) !== Number(encounter.correct_answer) && !wrongChoices.includes(c)
@@ -191,6 +209,38 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
       const lastDigit = Math.abs(Math.round(Number(encounter.correct_answer)) % 10);
       const hint = `แสง UV ส่องเห็นรหัสลับ: คำตอบของสมการนี้ลงท้ายด้วยเลข ${lastDigit}!`;
       setHintMessage(hint);
+    }
+  };
+
+  const handleUseHolyWater = () => {
+    if (isAnswered || isTimedOut || isHolyWaterActive) return;
+    if ((inventory.holy_water || 0) <= 0) {
+      sounds.playWrongAnswer();
+      return;
+    }
+    if (onUseItem && onUseItem('holy_water')) {
+      sounds.playHolyWater();
+      setIsHolyWaterActive(true);
+      setHintMessage('🍶 ชำระล้างด้วยน้ำมนต์ศักดิ์สิทธิ์! หากสะกดวิญญาณได้ จะได้รับแต้มและ EXP คูณ 2!');
+    }
+  };
+
+  const handleUseSaltBarrier = () => {
+    if (isAnswered || isTimedOut || isSaltBarrierActive) return;
+    if ((inventory.salt_barrier || 0) <= 0) {
+      sounds.playWrongAnswer();
+      return;
+    }
+    if (onUseItem && onUseItem('salt_barrier')) {
+      sounds.playItemUse();
+      setIsSaltBarrierActive(true);
+      const wrongAvailable = encounter.choices.filter(
+        (c) => Number(c) !== Number(encounter.correct_answer) && !wrongChoices.includes(c)
+      );
+      if (wrongAvailable.length > 0) {
+        setWrongChoices((prev) => [...prev, wrongAvailable[0]]);
+      }
+      setHintMessage('🧂 โรยม่านเกลือศักดิ์สิทธิ์! ป้องกันสตรีคไม่ให้ขาดหากตอบผิด และตัด 1 ช้อยส์ลวงแล้ว!');
     }
   };
 
@@ -311,6 +361,42 @@ export const GhostEncounterModal: React.FC<GhostEncounterModalProps> = ({
               >
                 <span>🔦 แสง UV</span>
                 <span className="font-mono text-[10px] font-bold text-amber-400">({inventory.uv_light || 0})</span>
+              </button>
+
+              <button
+                onClick={handleUseHolyWater}
+                disabled={(inventory.holy_water || 0) <= 0 || isHolyWaterActive}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition-all ${
+                  isHolyWaterActive
+                    ? 'bg-cyan-900 border-cyan-400 text-cyan-200 font-bold ring-2 ring-cyan-500/50'
+                    : (inventory.holy_water || 0) > 0
+                    ? 'bg-cyan-950/70 hover:bg-cyan-900 border-cyan-700 text-cyan-200 active:scale-95'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
+                }`}
+                title="ดื่มน้ำมนต์รับ EXP และแต้ม x2 เมื่อปราบสำเร็จ"
+              >
+                <span>🍶 น้ำมนต์ x2</span>
+                <span className="font-mono text-[10px] font-bold text-cyan-300">
+                  {isHolyWaterActive ? '✓' : `(${inventory.holy_water || 0})`}
+                </span>
+              </button>
+
+              <button
+                onClick={handleUseSaltBarrier}
+                disabled={(inventory.salt_barrier || 0) <= 0 || isSaltBarrierActive}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition-all ${
+                  isSaltBarrierActive
+                    ? 'bg-emerald-900 border-emerald-400 text-emerald-200 font-bold ring-2 ring-emerald-500/50'
+                    : (inventory.salt_barrier || 0) > 0
+                    ? 'bg-emerald-950/70 hover:bg-emerald-900 border-emerald-700 text-emerald-200 active:scale-95'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
+                }`}
+                title="โรยม่านเกลือปกป้องสตรีคและตัด 1 ช้อยส์ลวง"
+              >
+                <span>🧂 ม่านเกลือ</span>
+                <span className="font-mono text-[10px] font-bold text-emerald-300">
+                  {isSaltBarrierActive ? '✓' : `(${inventory.salt_barrier || 0})`}
+                </span>
               </button>
             </div>
           </div>

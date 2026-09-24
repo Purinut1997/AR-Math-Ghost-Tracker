@@ -49,10 +49,10 @@ export const GhostRadarHUD: React.FC<GhostRadarHUDProps> = () => {
       // Play proximity beep & heartbeat based on distance
       if (radarBeepEnabled) {
         if (internalDist < 1.4) {
-          sounds.playEmfTick();
+          sounds.playRadarPing();
           sounds.playHeartbeat(1.1);
         } else if (internalDist < 2.5 && Math.random() > 0.35) {
-          sounds.playEmfTick();
+          sounds.playRadarPing();
         } else if (Math.random() > 0.7) {
           sounds.playEmfTick();
         }

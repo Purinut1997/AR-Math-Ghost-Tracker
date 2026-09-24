@@ -18,6 +18,7 @@ import {
 import { GhostEncounter, GradeLevel, PlayerStats, PlayerInventory, ItemType, DailyBounty } from './types';
 import { sounds } from './utils/audio';
 import { loadOrCreateDailyBounties, saveDailyBounties, getRankByExp } from './utils/progression';
+import { getProceduralGhost } from './utils/ghostGenerator';
 import { ARCamera } from './components/ARCamera';
 import { GhostEncounterModal } from './components/GhostEncounterModal';
 import { GhostDexModal } from './components/GhostDexModal';
@@ -27,6 +28,7 @@ import { CertificateModal } from './components/CertificateModal';
 import { MainMenu } from './components/MainMenu';
 import { GameManualModal } from './components/GameManualModal';
 import { GhostPolaroidModal } from './components/GhostPolaroidModal';
+import { StoryPrologueModal } from './components/StoryPrologueModal';
 import { DailyBountiesModal } from './components/DailyBountiesModal';
 
 export default function App() {
@@ -149,12 +151,23 @@ export default function App() {
   const [inventory, setInventory] = useState<PlayerInventory>(() => {
     try {
       const saved = localStorage.getItem('ar_ghost_inventory');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          talisman: parsed.talisman ?? 2,
+          hourglass: parsed.hourglass ?? 2,
+          uv_light: parsed.uv_light ?? 1,
+          holy_water: parsed.holy_water ?? 1,
+          salt_barrier: parsed.salt_barrier ?? 1,
+        };
+      }
     } catch {}
     return {
       talisman: 2,
       hourglass: 2,
       uv_light: 1,
+      holy_water: 1,
+      salt_barrier: 1,
     };
   });
 
@@ -222,7 +235,7 @@ export default function App() {
     localStorage.removeItem('ar_ghost_inventory');
     localStorage.removeItem('ar_ghost_bounties_v1');
     setHistory([]);
-    setInventory({ talisman: 2, hourglass: 2, uv_light: 1 });
+    setInventory({ talisman: 2, hourglass: 2, uv_light: 1, holy_water: 1, salt_barrier: 1 });
     const defaultRank = getRankByExp(0);
     setStats({
       ghostsExorcised: 0,
@@ -246,6 +259,10 @@ export default function App() {
   const handleCaptureImage = async (imageBase64: string) => {
     setIsAnalyzing(true);
     try {
+      // 8-second timeout so the user never gets stuck waiting if the server/API is slow
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       const res = await fetch('/api/scan-ghost', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -253,10 +270,13 @@ export default function App() {
           image: imageBase64,
           gradeLevel,
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
-        throw new Error('ไม่สามารถวิเคราะห์ภาพถ่ายได้');
+        throw new Error(`ไม่สามารถวิเคราะห์ภาพถ่ายได้ (Status: ${res.status})`);
       }
 
       const data = await res.json();
@@ -281,18 +301,38 @@ export default function App() {
 
       setActiveEncounter(encounter);
     } catch (err) {
-      console.error('Scan error:', err);
+      console.warn('Scan request error, activating procedural ghost fallback:', err);
+      // Fallback guarantees that taking a photo ALWAYS triggers a ghost encounter!
+      const fallback = getProceduralGhost(gradeLevel);
+      const encounter: GhostEncounter = {
+        id: 'ghost-' + Date.now(),
+        ghost_type: fallback.ghost_type,
+        ghost_emoji: fallback.ghost_emoji,
+        narrative: fallback.narrative,
+        math_question: fallback.math_question,
+        correct_answer: fallback.correct_answer,
+        choices: fallback.choices,
+        imageSnapshot: imageBase64,
+        timestamp: Date.now(),
+        gradeLevel,
+        exorcised: false,
+        explanation_steps: fallback.explanation_steps,
+      };
+
+      setActiveEncounter(encounter);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleExorcised = (encounter: GhostEncounter, attempts: number) => {
+  const handleExorcised = (encounter: GhostEncounter, attempts: number, isDoubleReward?: boolean) => {
     const points = attempts === 1 ? 150 : attempts === 2 ? 100 : 70;
     const streakBonus = Math.min(stats.streak * 20, 100);
-    const earnedScore = points + streakBonus;
+    const multiplier = isDoubleReward ? 2 : 1;
+    const earnedScore = (points + streakBonus) * multiplier;
 
-    const expGained = (attempts === 1 ? 70 : 50) + Math.min(stats.streak * 10, 50);
+    const baseExp = (attempts === 1 ? 70 : 50) + Math.min(stats.streak * 10, 50);
+    const expGained = baseExp * multiplier;
     const newExp = (stats.exp || 0) + expGained;
     const rankData = getRankByExp(newExp);
 
@@ -321,7 +361,7 @@ export default function App() {
         let nextCur = b.current;
         if (b.id === 'bounty-exorcise-3') {
           nextCur = Math.min(b.target, b.current + 1);
-        } else if (b.id === 'bounty-streak-2') {
+        } else if (b.id === 'bounty-streak-2' || b.id === 'bounty-streak-3') {
           nextCur = Math.min(b.target, Math.max(b.current, newStreak));
         } else if (b.id === 'bounty-solve-5') {
           nextCur = Math.min(b.target, b.current + 1);
@@ -343,6 +383,7 @@ export default function App() {
       {currentView === 'menu' ? (
         <MainMenu
           onStartGame={() => setCurrentView('game')}
+          onOpenStory={() => setShowStoryIntro(true)}
           onOpenManual={() => setShowManual(true)}
           onOpenGhostDex={() => setShowGhostDex(true)}
           onOpenInventory={() => setShowInventory(true)}
@@ -587,47 +628,19 @@ export default function App() {
         onResetAllData={handleResetAllData}
       />
 
-      {/* First-time Welcome & Story Intro Modal */}
-      {showStoryIntro && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="absolute inset-0 horror-vignette pointer-events-none" />
-          <div className="relative w-full max-w-md bg-black/95 border border-red-900/70 rounded-3xl p-6 shadow-[0_0_50px_rgba(239,68,68,0.2)] text-center">
-            <div className="w-16 h-16 rounded-2xl bg-red-950/80 border border-red-600/50 mx-auto flex items-center justify-center text-3xl mb-4 shadow-lg shadow-red-950/80 spooky-float">
-              👻
-            </div>
-
-            <h2 className="text-xl font-bold text-white tracking-wide">
-              ยินดีต้อนรับสู่โรงเรียนอาถรรพ์!
-            </h2>
-            <p className="text-xs text-red-400 font-semibold mt-1 font-mono">
-              "AR GHOST TRACKER: ตำนานสมการซ่อนแอบ"
-            </p>
-
-            <div className="my-4 text-xs text-slate-300 space-y-2 text-left bg-slate-950/90 p-4 rounded-2xl border border-red-950/80 leading-relaxed shadow-inner">
-              <p>
-                🏫 ในยามค่ำคืน <strong>วิญญาณนักเรียนผู้สอบตกวิชาเลข</strong> ได้ตื่นขึ้นและสิงสถิตอยู่ตามมุมมืดและสิ่งของรอบตัวเธอ!
-              </p>
-              <p>
-                📷 <strong>วิธีสำรวจ:</strong> เล็งกล้องไปที่สิ่งของในห้อง (เช่น โต๊ะ, เก้าอี้, ตำราเรียน, กระเป๋า) แล้วกดชัตเตอร์สีแดงเพื่อปลุกวิญญาณ
-              </p>
-              <p>
-                ✨ <strong>สะกดวิญญาณ:</strong> แก้คำสาปสมการตัวเลขให้ถูกต้อง เพื่อปลดปล่อยวิญญาณให้สู่สุคติและชำระล้างคำสาป!
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                sounds.playBoo();
-                setShowStoryIntro(false);
-                localStorage.setItem('ar_ghost_intro_seen', 'true');
-              }}
-              className="w-full py-3 bg-gradient-to-r from-red-700 via-rose-700 to-red-800 hover:from-red-600 hover:to-rose-600 text-white font-bold rounded-2xl shadow-lg shadow-red-950/80 active:scale-95 transition-all text-sm tracking-wide border border-red-600/40"
-            >
-              เปิดโหมดล่าผี [เข้าสู่ความมืด] ➔
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Story Prologue Modal with Thai Voice Narration */}
+      <StoryPrologueModal
+        isOpen={showStoryIntro}
+        onClose={() => {
+          setShowStoryIntro(false);
+          localStorage.setItem('ar_ghost_intro_seen', 'true');
+        }}
+        onStartHunt={() => {
+          setShowStoryIntro(false);
+          localStorage.setItem('ar_ghost_intro_seen', 'true');
+          setCurrentView('game');
+        }}
+      />
     </div>
   );
 }

@@ -38,6 +38,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetAllData,
 }) => {
   const [showConfirmReset, setShowConfirmReset] = useState(false);
+  const [isThemePlaying, setIsThemePlaying] = useState(() => sounds.isThemePlaying());
 
   if (!isOpen) return null;
 
@@ -215,8 +216,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Audio Feedback Previews */}
             {soundEnabled && (
               <div>
+                {/* Custom Game Theme BGM Player Card */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-red-950/70 via-slate-950 to-black border border-red-900/70 mb-3.5 flex items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-red-900 to-rose-950 border border-red-600/50 flex items-center justify-center text-xl shadow-md">
+                      🎵
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                        <span>เพลงประจำเกม: มนต์สะกดโรงเรียนร้าง</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-900/80 text-red-300 border border-red-700/50">
+                          OST Original
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        กระดิ่งลมแก้วคริสตัล · กล่องดนตรีแก้วใส · คอร์ดสตริงส์อบอุ่น (ไร้เสียงเบสหึ่ง)
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const active = sounds.toggleGameTheme();
+                      setIsThemePlaying(active);
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 ${
+                      isThemePlaying
+                        ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] border border-red-400'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}
+                  >
+                    <span>{isThemePlaying ? '⏸️ หยุดเพลง' : '▶️ เล่นเพลงธีม'}</span>
+                  </button>
+                </div>
+
                 <label className="text-xs font-mono text-slate-400 uppercase tracking-wider block mb-2">
-                  ทดสอบฟังเสียงเอฟเฟกต์ (Horror SFX Soundboard)
+                  คลังไฟล์เสียงของเกม & เสียงพากย์ AI (Horror Audio Vault)
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <button
@@ -229,23 +265,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => sounds.playHeartbeat(1.3)}
-                    className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-rose-600 text-xs text-rose-300 transition-colors"
-                  >
-                    <span>💓</span>
-                    <span>หัวใจเต้นตึกตัก</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => sounds.playEmfTick()}
+                    onClick={() => sounds.playRadarPing()}
                     className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-amber-600 text-xs text-amber-300 transition-colors"
                   >
                     <span>📻</span>
-                    <span>เครื่อง EMF ผี</span>
+                    <span>เรดาร์ EMF</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => sounds.playHolyBell()}
+                    onClick={() => sounds.playPurifySuccess()}
                     className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-yellow-600 text-xs text-yellow-300 transition-colors"
                   >
                     <span>🎐</span>
@@ -253,11 +281,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => sounds.playGhostWhisper()}
-                    className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-purple-600 text-xs text-purple-300 transition-colors"
+                    onClick={() => sounds.playHolyWater()}
+                    className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-cyan-600 text-xs text-cyan-300 transition-colors"
                   >
-                    <span>💨</span>
-                    <span>เสียงกระซิบ</span>
+                    <span>🍶</span>
+                    <span>น้ำมนต์ศักดิ์สิทธิ์</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sounds.playTalismanBurn()}
+                    className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-rose-600 text-xs text-rose-300 transition-colors"
+                  >
+                    <span>📿</span>
+                    <span>ยันต์เผาไหม้</span>
                   </button>
                   <button
                     type="button"
@@ -265,7 +301,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-red-600 text-xs text-red-400 transition-colors"
                   >
                     <span>⚡</span>
-                    <span>ผีอาละวาด</span>
+                    <span>คำสาปอาละวาด</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sounds.playShutter()}
+                    className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-red-950 hover:border-indigo-600 text-xs text-indigo-300 transition-colors"
+                  >
+                    <span>📸</span>
+                    <span>ชัตเตอร์ AR</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sounds.playGhostVoiceIntro()}
+                    className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-800 text-xs text-purple-200 transition-colors font-medium"
+                  >
+                    <span>🗣️</span>
+                    <span>AI: แก้คำสาป</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sounds.playGhostVoicePurified()}
+                    className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800 text-xs text-emerald-200 transition-colors font-medium"
+                  >
+                    <span>🗣️</span>
+                    <span>AI: สู่สุคติ</span>
                   </button>
                 </div>
               </div>

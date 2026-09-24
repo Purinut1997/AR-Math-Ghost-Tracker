@@ -21,6 +21,7 @@ import { getRankByExp } from '../utils/progression';
 
 interface MainMenuProps {
   onStartGame: () => void;
+  onOpenStory: () => void;
   onOpenManual: () => void;
   onOpenGhostDex: () => void;
   onOpenInventory: () => void;
@@ -38,6 +39,7 @@ interface MainMenuProps {
 
 export const MainMenu: React.FC<MainMenuProps> = ({
   onStartGame,
+  onOpenStory,
   onOpenManual,
   onOpenGhostDex,
   onOpenInventory,
@@ -57,7 +59,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 
   const handleStart = () => {
     sounds.playBoo();
-    onStartGame();
+    const skipPrologue = localStorage.getItem('ar_ghost_skip_prologue') === 'true';
+    if (!skipPrologue) {
+      onOpenStory();
+    } else {
+      onStartGame();
+    }
   };
 
   const totalItems =
@@ -263,6 +270,21 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               <Play className="w-4 h-4 fill-white text-white ml-0.5" />
             </div>
             <span>เริ่มสำรวจโรงเรียนร้าง [START HUNT]</span>
+          </button>
+
+          {/* STORY PROLOGUE BUTTON */}
+          <button
+            onClick={() => {
+              sounds.playClick();
+              onOpenStory();
+            }}
+            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-950/80 via-black to-slate-950/90 hover:from-purple-900/90 hover:to-slate-900 border border-purple-800/60 hover:border-purple-500 text-purple-200 text-xs sm:text-sm font-bold font-mono flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+          >
+            <span>🎬</span>
+            <span>ชมเรื่องเล่าบทนำ [STORY PROLOGUE]</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-700/60">
+              มีเสียงพากย์ AI
+            </span>
           </button>
 
           {/* Secondary Action Grid */}

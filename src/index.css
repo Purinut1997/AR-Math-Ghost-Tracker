@@ -8,31 +8,32 @@
   }
 }
 
-/* Horror Film Vignette effect */
+/* Subtle viewfinder vignette effect (keeps center bright and visible) */
 .horror-vignette {
   background: radial-gradient(
     circle at center,
-    transparent 25%,
-    rgba(0, 0, 0, 0.45) 55%,
-    rgba(2, 6, 23, 0.88) 85%,
-    rgba(0, 0, 0, 0.98) 100%
+    transparent 70%,
+    rgba(0, 0, 0, 0.2) 88%,
+    rgba(0, 0, 0, 0.45) 100%
   );
   pointer-events: none;
 }
 
 /* Horror Film Camera Tint & Grading */
 .horror-grade {
-  filter: contrast(135%) brightness(78%) saturate(75%) hue-rotate(-10deg);
+  filter: contrast(105%) brightness(105%) saturate(90%);
 }
 
-/* Eerie Flashlight spotlight beam in camera */
+/* Illuminating Flashlight spotlight beam in camera to brighten dark scenes */
 .flashlight-spotlight {
   background: radial-gradient(
-    circle at 50% 45%,
-    rgba(255, 255, 240, 0.14) 0%,
-    rgba(140, 255, 200, 0.05) 30%,
-    transparent 65%
+    circle at 50% 50%,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 230, 0.18) 35%,
+    rgba(180, 255, 220, 0.06) 60%,
+    transparent 80%
   );
+  mix-blend-mode: screen;
   pointer-events: none;
 }
 

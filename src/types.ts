@@ -27,9 +27,9 @@ export interface PlayerStats {
   expToNextLevel: number;
 }
 
-export type VisionFilter = 'horror' | 'night' | 'spectral' | 'shadow';
+export type VisionFilter = 'clear' | 'horror' | 'night' | 'spectral' | 'shadow';
 
-export type ItemType = 'talisman' | 'hourglass' | 'uv_light';
+export type ItemType = 'talisman' | 'hourglass' | 'uv_light' | 'holy_water' | 'salt_barrier';
 
 export interface InventoryItem {
   id: ItemType;
@@ -44,6 +44,8 @@ export interface PlayerInventory {
   talisman: number; // Discard 2 wrong choices
   hourglass: number; // Add 30 seconds
   uv_light: number; // Reveal ghost hint
+  holy_water: number; // 2x Exp and Score on exorcism
+  salt_barrier: number; // Streak protection shield + remove 1 wrong choice
 }
 
 export interface DailyBounty {

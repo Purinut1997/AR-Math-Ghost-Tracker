@@ -7,7 +7,8 @@ class SoundManager {
   public ambienceEnabled: boolean = true;
   public horrorStyle: HorrorAudioStyle = 'realistic';
 
-  // Ambient Drone Audio Nodes
+  // Ambient Drone Audio Nodes & File Player
+  private bgmAudio: HTMLAudioElement | null = null;
   private ambientGain: GainNode | null = null;
   private ambientSources: {
     stop?: () => void;
@@ -44,6 +45,19 @@ class SoundManager {
       };
       window.addEventListener('click', unlockAudio, { once: true });
       window.addEventListener('touchstart', unlockAudio, { once: true });
+    }
+  }
+
+  // Play custom game audio files from /audio/
+  public playAudioFile(filePath: string, volume: number = 0.8): HTMLAudioElement | null {
+    if (!this.enabled || typeof window === 'undefined') return null;
+    try {
+      const audio = new Audio(filePath);
+      audio.volume = Math.max(0, Math.min(1, volume));
+      audio.play().catch(() => {});
+      return audio;
+    } catch {
+      return null;
     }
   }
 
@@ -93,15 +107,29 @@ class SoundManager {
 
   // ==========================================
   // 1. HAUNTING AMBIENCE DRONE (BGM บรรยากาศหลอน)
-  // Continuous real-time synthesized horror soundscape
+  // Continuous horror soundscape using generated game audio file + procedural synth layers
   // ==========================================
   public startHorrorAmbience() {
     if (!this.enabled || !this.ambienceEnabled || this.isAmbienceRunning) return;
+    this.isAmbienceRunning = true;
+
+    // A. Play custom game horror ambience audio file (looping)
+    if (typeof window !== 'undefined') {
+      try {
+        if (!this.bgmAudio) {
+          this.bgmAudio = new Audio('/audio/bgm_ghost_school_theme.wav');
+          this.bgmAudio.loop = true;
+          this.bgmAudio.volume = 0.42;
+        }
+        this.bgmAudio.currentTime = 0;
+        this.bgmAudio.play().catch(() => {});
+      } catch {}
+    }
+
     this.initCtx();
     if (!this.ctx) return;
 
     try {
-      this.isAmbienceRunning = true;
       const t = this.ctx.currentTime;
 
       // Master ambient gain with smooth fade in
@@ -111,40 +139,41 @@ class SoundManager {
       masterGain.connect(this.ctx.destination);
       this.ambientGain = masterGain;
 
-      // Layer A: Sub-bass rumble (42Hz - abandoned hallway resonant drone)
-      const subOsc = this.ctx.createOscillator();
-      const subGain = this.ctx.createGain();
-      subOsc.type = 'sine';
-      subOsc.frequency.setValueAtTime(42, t);
-      subGain.gain.setValueAtTime(0.4, t);
-      subOsc.connect(subGain);
-      subGain.connect(masterGain);
-      subOsc.start(t);
+      // Layer A: Sparkling Crystal Wind Chimes (แทนเสียง Sub-Bass หึ่งๆ ด้วยกระดิ่งลมแก้วคริสตัลใส)
+      const chimeOsc = this.ctx.createOscillator();
+      const chimeGain = this.ctx.createGain();
+      chimeOsc.type = 'sine';
+      chimeOsc.frequency.setValueAtTime(880, t); // A5 crystalline
+      chimeGain.gain.setValueAtTime(0.04, t);
+      chimeOsc.connect(chimeGain);
+      chimeGain.connect(masterGain);
+      chimeOsc.start(t);
 
-      // Layer B: Detuned minor harmonic drone (73.4Hz & 77.2Hz - binaural tension)
-      const drone1 = this.ctx.createOscillator();
-      const drone2 = this.ctx.createOscillator();
-      const droneFilter = this.ctx.createBiquadFilter();
-      const droneGain = this.ctx.createGain();
+      // Layer B: Warm Mid-Range Celestial String Pad (เสียงคอร์ดอบอุ่น ย่านกลาง 220Hz-330Hz ไม่มีเบสหึ่ง)
+      const pad1 = this.ctx.createOscillator();
+      const pad2 = this.ctx.createOscillator();
+      const padFilter = this.ctx.createBiquadFilter();
+      const padGain = this.ctx.createGain();
 
-      drone1.type = 'sawtooth';
-      drone2.type = 'triangle';
-      drone1.frequency.setValueAtTime(73.4, t); // D2
-      drone2.frequency.setValueAtTime(77.2, t); // Slightly detuned
+      pad1.type = 'sine';
+      pad2.type = 'triangle';
+      pad1.frequency.setValueAtTime(220, t); // A3 (Mid tone)
+      pad2.frequency.setValueAtTime(261.63, t); // C4 (Mid tone)
 
-      droneFilter.type = 'lowpass';
-      droneFilter.frequency.setValueAtTime(160, t);
-      droneFilter.Q.setValueAtTime(2.0, t);
+      // High-pass filter to guarantee zero sub-bass rumble
+      padFilter.type = 'highpass';
+      padFilter.frequency.setValueAtTime(180, t);
+      padFilter.Q.setValueAtTime(1.0, t);
 
-      droneGain.gain.setValueAtTime(0.18, t);
+      padGain.gain.setValueAtTime(0.06, t);
 
-      drone1.connect(droneFilter);
-      drone2.connect(droneFilter);
-      droneFilter.connect(droneGain);
-      droneGain.connect(masterGain);
+      pad1.connect(padFilter);
+      pad2.connect(padFilter);
+      padFilter.connect(padGain);
+      padGain.connect(masterGain);
 
-      drone1.start(t);
-      drone2.start(t);
+      pad1.start(t);
+      pad2.start(t);
 
       // Layer C: Ghostly howling wind (Filtered pink/white noise sweep)
       const bufferLength = this.ctx.sampleRate * 4; // 4 seconds noise loop
@@ -184,9 +213,9 @@ class SoundManager {
       windSource.start(t);
 
       this.ambientSources = [
-        { stop: () => subOsc.stop(), disconnect: () => subOsc.disconnect() },
-        { stop: () => drone1.stop(), disconnect: () => drone1.disconnect() },
-        { stop: () => drone2.stop(), disconnect: () => drone2.disconnect() },
+        { stop: () => chimeOsc.stop(), disconnect: () => chimeOsc.disconnect() },
+        { stop: () => pad1.stop(), disconnect: () => pad1.disconnect() },
+        { stop: () => pad2.stop(), disconnect: () => pad2.disconnect() },
         { stop: () => windSource.stop(), disconnect: () => windSource.disconnect() },
         { stop: () => windLfo.stop(), disconnect: () => windLfo.disconnect() },
       ];
@@ -204,6 +233,12 @@ class SoundManager {
 
   public stopHorrorAmbience() {
     this.isAmbienceRunning = false;
+    if (this.bgmAudio) {
+      try {
+        this.bgmAudio.pause();
+        this.bgmAudio.currentTime = 0;
+      } catch {}
+    }
     if (this.ambientTimer) {
       clearInterval(this.ambientTimer);
       this.ambientTimer = null;
@@ -225,6 +260,20 @@ class SoundManager {
       } catch {
         this.ambientSources = [];
       }
+    }
+  }
+
+  public isThemePlaying(): boolean {
+    return this.isAmbienceRunning;
+  }
+
+  public toggleGameTheme(): boolean {
+    if (this.isAmbienceRunning) {
+      this.stopHorrorAmbience();
+      return false;
+    } else {
+      this.startHorrorAmbience();
+      return true;
     }
   }
 
@@ -272,10 +321,11 @@ class SoundManager {
 
   // ==========================================
   // 3. HORROR JUMP STINGER (เสียงผีโผล่สยองขวัญ / จัมป์สแกร์)
-  // Deep sub impact + dissonant bowed screech + ghost vocal wail
+  // Deep sub impact + metallic distortion screech + ghost vocal wail
   // ==========================================
   public playHorrorStinger() {
     if (!this.enabled) return;
+    this.playAudioFile('/audio/sfx_ghost_stinger.wav', 0.85);
     this.initCtx();
     if (!this.ctx) return;
 
@@ -410,6 +460,7 @@ class SoundManager {
   // ==========================================
   public playWrongAnswer() {
     if (!this.enabled) return;
+    this.playAudioFile('/audio/sfx_curse_fail.wav', 0.8);
     this.initCtx();
     if (!this.ctx) return;
 
@@ -569,6 +620,8 @@ class SoundManager {
   // 9. EXORCISM SUCCESS (ระฆังธรรมจักร + ประกายดาวปัญญา)
   // ==========================================
   public playPurifySuccess() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/sfx_exorcism_chime.wav', 0.85);
     this.playHolyBell();
     setTimeout(() => {
       this.playSparkle();
@@ -576,8 +629,14 @@ class SoundManager {
   }
 
   // ==========================================
-  // 10. EMF METER / SPIRIT BOX TICKS
+  // 10. EMF METER / SPIRIT BOX TICKS & RADAR PING
   // ==========================================
+  public playRadarPing() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/sfx_radar_ping.wav', 0.75);
+    this.playEmfTick();
+  }
+
   public playEmfTick() {
     if (!this.enabled) return;
     this.initCtx();
@@ -640,6 +699,7 @@ class SoundManager {
   // ==========================================
   public playShutter() {
     if (!this.enabled) return;
+    this.playAudioFile('/audio/sfx_camera_shutter.wav', 0.85);
     this.initCtx();
     if (!this.ctx) return;
 
@@ -705,6 +765,41 @@ class SoundManager {
 
     osc.start(t);
     osc.stop(t + 0.32);
+  }
+
+  // Sacred Water item effect
+  public playHolyWater() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/sfx_holy_water.wav', 0.85);
+    this.playItemUse();
+  }
+
+  // Talisman paper burning swoosh
+  public playTalismanBurn() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/sfx_talisman_burn.wav', 0.85);
+    this.playItemUse();
+  }
+
+  // AI Ghost Voices
+  public playGhostVoiceIntro() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/voice_ghost_intro.mp3', 0.95);
+  }
+
+  public playGhostVoiceWrong() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/voice_ghost_wrong.mp3', 0.95);
+  }
+
+  public playGhostVoicePurified() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/voice_ghost_purified.mp3', 0.95);
+  }
+
+  public playRadarDetectedVoice() {
+    if (!this.enabled) return;
+    this.playAudioFile('/audio/voice_radar_detected.mp3', 0.95);
   }
 
   public playFanfare() {

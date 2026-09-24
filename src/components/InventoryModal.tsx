@@ -36,6 +36,22 @@ export const ITEMS_CATALOG: InventoryItem[] = [
     count: 0,
     cost: 60,
   },
+  {
+    id: 'holy_water',
+    name: 'น้ำมนต์สะกดวิญญาณ (Sacred Water)',
+    emoji: '🍶',
+    description: 'ชำระล้างคำสาป รับค่าประสบการณ์ EXP และแต้มคะแนนคูณ 2 เมื่อปราบผีสำเร็จ!',
+    count: 0,
+    cost: 75,
+  },
+  {
+    id: 'salt_barrier',
+    name: 'เกลือศักดิ์สิทธิ์สะกดวิญญาณ (Salt Barrier)',
+    emoji: '🧂',
+    description: 'คุ้มครองสตรีคไม่ให้หลุดแม้จะตอบผิด พร้อมตัด 1 ช้อยส์ที่ผิดออกไปทันที',
+    count: 0,
+    cost: 55,
+  },
 ];
 
 export const InventoryModal: React.FC<InventoryModalProps> = ({

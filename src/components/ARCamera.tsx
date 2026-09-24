@@ -5,6 +5,7 @@ import {
   Upload,
   Zap,
   ZapOff,
+  Sun,
   Crosshair,
   Compass,
   Radio,
@@ -34,10 +35,49 @@ export const ARCamera: React.FC<ARCameraProps> = ({
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [hasTorch, setHasTorch] = useState<boolean>(false);
   const [torchOn, setTorchOn] = useState<boolean>(false);
+  const [spotlightOn, setSpotlightOn] = useState<boolean>(true);
+  const [brightnessBoost, setBrightnessBoost] = useState<number>(1.3); // Default +30% bright so it's never dark
   const [emfLevel, setEmfLevel] = useState<number>(2); // 1 to 5
-  const [visionFilter, setVisionFilter] = useState<VisionFilter>('horror');
+  const [visionFilter, setVisionFilter] = useState<VisionFilter>('clear'); // Default clear bright view
   const [showVirtualSpots, setShowVirtualSpots] = useState<boolean>(false);
   const [selectedSpotImage, setSelectedSpotImage] = useState<string | null>(null);
+  const [isFlashing, setIsFlashing] = useState<boolean>(false);
+
+  // Helper to create an atmospheric radar scan canvas when no camera or photo is loaded
+  const createFallbackCanvas = (): string => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // Dark horror school atmosphere gradient
+        const grad = ctx.createRadialGradient(320, 240, 50, 320, 240, 320);
+        grad.addColorStop(0, '#132822');
+        grad.addColorStop(1, '#05070a');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 640, 480);
+
+        // Paranormal grid
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(60, 40, 520, 400);
+
+        // Center reticle
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(320, 240, 70, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#10b981';
+        ctx.font = '14px monospace';
+        ctx.fillText('EMF ANOMALY DETECTED [PARANORMAL RADAR]', 80, 70);
+        return canvas.toDataURL('image/jpeg', 0.85);
+      }
+    } catch {}
+    return '';
+  };
 
   // Initialize camera stream
   useEffect(() => {
@@ -84,7 +124,9 @@ export const ARCamera: React.FC<ARCameraProps> = ({
       } catch (err: any) {
         console.warn('Camera access issue:', err);
         setHasCamera(false);
-        setCameraError('ไม่สามารถเข้าถึงกล้องได้ (สามารถใช้ปุ่มอัปโหลดรูป หรือเลือกฉากจำลองโรงเรียนด้านล่าง)');
+        setCameraError('ไม่สามารถเปิดกล้องจริงได้ ระบบได้เตรียมฉากจำลองโรงเรียนอาถรรพ์ให้ใช้งานแทนได้ทันที');
+        // Automatically default to the first haunted school spot if not already set, so viewfinder is never empty
+        setSelectedSpotImage((prev) => prev || SAMPLE_SCHOOL_SPOTS[0].imageUrl);
       }
     };
 
@@ -139,31 +181,52 @@ export const ARCamera: React.FC<ARCameraProps> = ({
     if (isAnalyzing) return;
     sounds.playShutter();
 
+    // Trigger visual shutter flash effect
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 220);
+
     // If using virtual spot image
     if (selectedSpotImage) {
       onCaptureImage(selectedSpotImage);
       return;
     }
 
-    // Capture from video stream
+    let capturedDataUrl: string | null = null;
     const video = videoRef.current;
-    if (!video) return;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Apply mirror if user facing camera
-    if (facingMode === 'user') {
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
+    // Safely capture from video stream
+    try {
+      if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Apply mirror if user facing camera
+          if (facingMode === 'user') {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+          }
+          // Brighten snapshot if camera boost is active so AI analysis gets clear images
+          if (brightnessBoost > 1.0) {
+            ctx.filter = `brightness(${brightnessBoost})`;
+          }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          capturedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        }
+      }
+    } catch (err) {
+      console.warn('Direct video capture error, falling back to simulated snapshot:', err);
     }
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    onCaptureImage(dataUrl);
+    // Bulletproof fallback: If video was not ready or browser threw canvas error
+    if (!capturedDataUrl) {
+      const fallbackUrl = SAMPLE_SCHOOL_SPOTS[0]?.imageUrl || createFallbackCanvas();
+      setSelectedSpotImage(fallbackUrl);
+      capturedDataUrl = fallbackUrl;
+    }
+
+    onCaptureImage(capturedDataUrl);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,6 +234,9 @@ export const ARCamera: React.FC<ARCameraProps> = ({
     if (!file) return;
 
     sounds.playShutter();
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 220);
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
@@ -188,23 +254,57 @@ export const ARCamera: React.FC<ARCameraProps> = ({
     setShowVirtualSpots(false);
   };
 
-  // Vision Filter CSS Classes
-  const getFilterStyle = () => {
+  // Dynamic CSS filter calculating brightness boost & eerie color palettes without darkening the scene
+  const getFilterCss = () => {
+    const b = Math.round(100 * brightnessBoost);
     switch (visionFilter) {
-      case 'horror':
-        // Atmospheric found-footage horror movie look: dark, high contrast, desaturated, gritty tint
-        return 'contrast-[140%] brightness-[72%] saturate-[70%] hue-rotate-[-10deg]';
+      case 'clear':
+        // Crisp, natural, bright viewfinder
+        return `contrast(102%) brightness(${b}%) saturate(105%)`;
       case 'night':
-        // Eerie night-vision camcorder green
-        return 'contrast-[145%] brightness-[80%] saturate-[140%] hue-rotate-[90deg] sepia-[30%]';
+        // High-sensitivity Night Vision: significantly amplifies ambient light in green phosphor spectrum
+        return `contrast(115%) brightness(${Math.round(b * 1.35)}%) saturate(130%) hue-rotate(90deg) sepia(15%)`;
       case 'spectral':
-        // Paranormal ultraviolet ghost frequency
-        return 'contrast-[155%] brightness-[75%] hue-rotate-[245deg] invert-[0.12]';
+        // Paranormal ultraviolet ghost frequency (bright purple/cyan luminescence)
+        return `contrast(110%) brightness(${Math.round(b * 1.2)}%) hue-rotate(240deg) saturate(120%)`;
+      case 'horror':
+        // Atmospheric found-footage ghost cam: vibrant clarity with cold cinematic tone
+        return `contrast(110%) brightness(${Math.round(b * 1.05)}%) saturate(92%) hue-rotate(-5deg)`;
       case 'shadow':
-        // Pitch black shadows with stark silhouette highlights
-        return 'contrast-[175%] brightness-[65%] grayscale';
+        // High-contrast paranormal monochrome
+        return `contrast(125%) brightness(${Math.round(b * 1.15)}%) grayscale(100%)`;
       default:
-        return 'contrast-[135%] brightness-[75%] saturate-[75%]';
+        return `contrast(102%) brightness(${b}%) saturate(100%)`;
+    }
+  };
+
+  const cycleBrightness = () => {
+    sounds.playClick();
+    setBrightnessBoost((prev) => {
+      if (prev <= 1.05) return 1.3;
+      if (prev <= 1.35) return 1.6;
+      if (prev <= 1.65) return 2.0;
+      return 1.0;
+    });
+  };
+
+  const cycleVisionFilter = () => {
+    sounds.playClick();
+    setVisionFilter((prev) => {
+      if (prev === 'clear') return 'night';
+      if (prev === 'night') return 'spectral';
+      if (prev === 'spectral') return 'horror';
+      if (prev === 'horror') return 'shadow';
+      return 'clear';
+    });
+  };
+
+  const toggleFlashlight = () => {
+    sounds.playClick();
+    if (hasTorch) {
+      toggleTorch();
+    } else {
+      setSpotlightOn(!spotlightOn);
     }
   };
 
@@ -216,9 +316,17 @@ export const ARCamera: React.FC<ARCameraProps> = ({
         type="file"
         accept="image/*"
         capture="environment"
+        onClick={(e) => {
+          (e.target as HTMLInputElement).value = '';
+        }}
         onChange={handleFileUpload}
         className="hidden"
       />
+
+      {/* Instant Shutter Flash Overlay */}
+      {isFlashing && (
+        <div className="absolute inset-0 z-50 bg-white/70 pointer-events-none transition-opacity duration-150" />
+      )}
 
       {/* Main Viewfinder Video or Simulated Spot */}
       <div className="absolute inset-0 z-0 overflow-hidden bg-black">
@@ -226,7 +334,8 @@ export const ARCamera: React.FC<ARCameraProps> = ({
           <img
             src={selectedSpotImage}
             alt="Virtual Spot"
-            className={`w-full h-full object-cover transition-all duration-300 ${getFilterStyle()}`}
+            style={{ filter: getFilterCss() }}
+            className="w-full h-full object-cover transition-all duration-300"
           />
         ) : (
           <video
@@ -234,47 +343,50 @@ export const ARCamera: React.FC<ARCameraProps> = ({
             playsInline
             muted
             autoPlay
+            onLoadedMetadata={(e) => {
+              (e.target as HTMLVideoElement).play().catch(() => {});
+            }}
+            style={{ filter: getFilterCss() }}
             className={`w-full h-full object-cover transition-all duration-300 ${
               facingMode === 'user' ? 'scale-x-[-1]' : ''
-            } ${getFilterStyle()}`}
+            }`}
           />
         )}
 
-        {/* Ambient Dark Horror Flashlight Spotlight Beam */}
-        <div className="absolute inset-0 flashlight-spotlight pointer-events-none" />
+        {/* Ambient Illuminating Flashlight Spotlight Beam (Brightens dark center) */}
+        {spotlightOn && (
+          <div className="absolute inset-0 flashlight-spotlight pointer-events-none transition-opacity duration-300" />
+        )}
 
-        {/* Cinema Horror Heavy Vignette & Darkened Edges */}
+        {/* Subtle Frame Vignette (Keeps screen fully bright & clear) */}
         <div className="absolute inset-0 horror-vignette pointer-events-none" />
 
-        {/* Vision Filter Specific Color Grading Overlays */}
-        {visionFilter === 'horror' && (
-          <div className="absolute inset-0 bg-teal-950/25 mix-blend-color-burn pointer-events-none" />
-        )}
+        {/* Gentle Screen Color Grading (Screen blend to preserve all brightness) */}
         {visionFilter === 'night' && (
-          <div className="absolute inset-0 bg-emerald-950/40 mix-blend-color-burn pointer-events-none" />
+          <div className="absolute inset-0 bg-emerald-500/10 mix-blend-screen pointer-events-none" />
         )}
         {visionFilter === 'spectral' && (
-          <div className="absolute inset-0 bg-purple-950/30 mix-blend-overlay pointer-events-none" />
+          <div className="absolute inset-0 bg-purple-500/15 mix-blend-screen pointer-events-none" />
         )}
-        {visionFilter === 'shadow' && (
-          <div className="absolute inset-0 bg-slate-950/50 mix-blend-multiply pointer-events-none" />
+        {visionFilter === 'horror' && (
+          <div className="absolute inset-0 bg-teal-500/10 mix-blend-screen pointer-events-none" />
         )}
 
-        {/* Drifting Ghostly Mist & Fog Layer */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Drifting Ghostly Mist Layer (Gentle translucent atmosphere) */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-20">
           <div
-            className="absolute -inset-10 horror-fog opacity-35"
+            className="absolute -inset-10 horror-fog"
             style={{
-              background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(130, 180, 160, 0.22), transparent 70%), radial-gradient(ellipse 50% 30% at 30% 40%, rgba(70, 90, 120, 0.18), transparent 60%)',
+              background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(130, 220, 180, 0.15), transparent 70%)',
             }}
           />
         </div>
 
-        {/* Retro Camcorder / Found-Footage Scanlines & Noise */}
+        {/* Retro Camcorder Scanlines (Subtle translucent highlight, not darkening) */}
         <div
-          className="absolute inset-0 pointer-events-none opacity-30 vhs-flicker"
+          className="absolute inset-0 pointer-events-none opacity-10 vhs-flicker"
           style={{
-            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.65) 3px, rgba(0,0,0,0.65) 4px)',
+            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.08) 4px)',
           }}
         />
 
@@ -282,9 +394,9 @@ export const ARCamera: React.FC<ARCameraProps> = ({
         {isAnalyzing && (
           <div className="absolute inset-0 pointer-events-none z-30">
             <div className="w-full h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_#10b981] animate-bounce" />
-            <div className="absolute inset-0 bg-emerald-950/30 backdrop-blur-[1px] flex flex-col items-center justify-center">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center">
               <div className="w-16 h-16 border-4 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin mb-4" />
-              <div className="bg-slate-900/90 border border-emerald-500/50 px-5 py-2.5 rounded-2xl shadow-xl text-center">
+              <div className="bg-slate-900/95 border border-emerald-500/50 px-5 py-2.5 rounded-2xl shadow-xl text-center">
                 <p className="text-emerald-400 font-bold text-sm tracking-wide animate-pulse">
                   🔮 กำลังวิเคราะห์คลื่นวิญญาณในวัตถุ...
                 </p>
@@ -307,7 +419,7 @@ export const ARCamera: React.FC<ARCameraProps> = ({
           <div className="hidden sm:flex flex-col gap-1">
             <div className="flex items-center gap-1.5 font-mono text-[10px] bg-black/80 px-2 py-0.5 rounded-full border border-red-950/80">
               <span className="w-2 h-2 rounded-full bg-red-600 animate-ping inline-block" />
-              <span className="text-red-500 font-bold tracking-wider">● REC [NIGHT]</span>
+              <span className="text-red-500 font-bold tracking-wider">● REC [AR-CAM]</span>
             </div>
 
             {/* Compact EMF Meter */}
@@ -334,50 +446,58 @@ export const ARCamera: React.FC<ARCameraProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Camera Tools in a cohesive pill */}
-        <div className="flex items-center gap-1.5 bg-black/80 backdrop-blur-md p-1 rounded-2xl border border-red-950/80 shadow-md">
+        {/* Right Side: Camera Tools */}
+        <div className="flex items-center gap-1.5 bg-black/85 backdrop-blur-md p-1 rounded-2xl border border-slate-800 shadow-md">
+          {/* Quick Brightness Boost Button */}
+          <button
+            onClick={cycleBrightness}
+            className={`px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 ${
+              brightnessBoost > 1.0
+                ? 'bg-amber-950/70 border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+            }`}
+            title="ปรับความสว่างกล้อง (+30% / +60% / +100%)"
+          >
+            <Sun className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[10px] font-mono font-bold">
+              {brightnessBoost > 1.0 ? `+${Math.round((brightnessBoost - 1) * 100)}%` : 'แสงปกติ'}
+            </span>
+          </button>
+
+          {/* Flashlight / Torch Toggle */}
+          <button
+            onClick={toggleFlashlight}
+            className={`p-1.5 rounded-xl border transition-all ${
+              (hasTorch ? torchOn : spotlightOn)
+                ? 'bg-yellow-500/20 border-yellow-400 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.3)]'
+                : 'bg-slate-900 border-slate-700 text-slate-400'
+            }`}
+            title={hasTorch ? 'เปิด/ปิดไฟฉายเครื่อง' : 'เปิด/ปิดสปอตไลท์ส่องสว่าง'}
+          >
+            {(hasTorch ? torchOn : spotlightOn) ? <Zap className="w-4 h-4" /> : <ZapOff className="w-4 h-4" />}
+          </button>
+
           {/* Vision Filter Toggle */}
           <button
-            onClick={() => {
-              sounds.playClick();
-              setVisionFilter((prev) => {
-                if (prev === 'horror') return 'night';
-                if (prev === 'night') return 'spectral';
-                if (prev === 'spectral') return 'shadow';
-                return 'horror';
-              });
-            }}
-            className={`px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 ${
-              visionFilter === 'horror'
-                ? 'bg-slate-950 border-red-500/70 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.3)]'
+            onClick={cycleVisionFilter}
+            className={`px-2 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 ${
+              visionFilter === 'clear'
+                ? 'bg-slate-900 border-slate-700 text-slate-200'
                 : visionFilter === 'night'
                 ? 'bg-emerald-950 border-emerald-500 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
                 : visionFilter === 'spectral'
                 ? 'bg-purple-950 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.3)]'
-                : 'bg-black border-slate-700 text-slate-200'
+                : visionFilter === 'horror'
+                ? 'bg-red-950 border-red-500/70 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.3)]'
+                : 'bg-black border-slate-600 text-slate-300'
             }`}
             title={`ฟิลเตอร์ภาพ: ${visionFilter}`}
           >
             <Eye className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-mono font-bold uppercase hidden xs:inline">
-              {visionFilter}
+            <span className="text-[10px] font-mono font-bold uppercase hidden sm:inline">
+              {visionFilter === 'clear' ? 'ชัดเจน' : visionFilter}
             </span>
           </button>
-
-          {/* Torch toggle if available */}
-          {hasTorch && (
-            <button
-              onClick={toggleTorch}
-              className={`p-1.5 rounded-xl border transition-all ${
-                torchOn
-                  ? 'bg-yellow-500/20 border-yellow-400 text-yellow-300'
-                  : 'bg-slate-900 border-slate-700 text-slate-300'
-              }`}
-              title="เปิด/ปิดไฟฉาย"
-            >
-              {torchOn ? <Zap className="w-4 h-4" /> : <ZapOff className="w-4 h-4" />}
-            </button>
-          )}
 
           {/* Switch Camera */}
           <button
@@ -393,27 +513,64 @@ export const ARCamera: React.FC<ARCameraProps> = ({
       {/* AR HUD: Center Reticle Target (Proportionate, no collision) */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none px-4 py-2">
         {/* Reticle Box */}
-        <div className="relative w-52 h-52 sm:w-64 sm:h-64 border border-emerald-500/20 rounded-3xl flex items-center justify-center shadow-[inset_0_0_30px_rgba(0,0,0,0.8)]">
+        <div className="relative w-52 h-52 sm:w-64 sm:h-64 border border-emerald-500/30 rounded-3xl flex items-center justify-center shadow-[inset_0_0_20px_rgba(16,185,129,0.15)]">
           {/* Target Corners */}
-          <div className="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-red-500/80" />
-          <div className="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-red-500/80" />
-          <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-red-500/80" />
-          <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-red-500/80" />
+          <div className="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-red-500/90" />
+          <div className="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-red-500/90" />
+          <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-red-500/90" />
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-red-500/90" />
 
           {/* Center Crosshair */}
-          <div className="w-9 h-9 rounded-full border border-dashed border-red-500/50 animate-spin" style={{ animationDuration: '14s' }} />
-          <div className="absolute w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]" />
+          <div className="w-9 h-9 rounded-full border border-dashed border-red-500/60 animate-spin" style={{ animationDuration: '14s' }} />
+          <div className="absolute w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444]" />
         </div>
 
-        {/* Scanning Status Text (Placed below reticle with safe margin) */}
-        <div className="mt-3 bg-black/85 backdrop-blur-sm px-3.5 py-1 rounded-full border border-red-900/60 text-[11px] font-mono text-slate-300 flex items-center gap-1.5 shadow-lg">
+        {/* Scanning Status Text */}
+        <div className="mt-3 bg-black/85 backdrop-blur-sm px-3.5 py-1 rounded-full border border-red-900/60 text-[11px] font-mono text-slate-200 flex items-center gap-1.5 shadow-lg">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />
-          <span>{selectedSpotImage ? 'ล็อคเป้าหมายวัตถุหลอนแล้ว' : 'เล็งกล้องไปที่วัตถุในเงามืด'}</span>
+          <span>{selectedSpotImage ? 'ล็อคเป้าหมายวัตถุหลอนแล้ว' : 'เล็งกล้องไปที่วัตถุหรือคนรอบตัว'}</span>
+        </div>
+
+        {/* Quick Brightness & Spotlight helper chip */}
+        <div className="mt-2.5 flex items-center gap-2 pointer-events-auto">
+          <button
+            type="button"
+            onClick={cycleBrightness}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/85 hover:bg-black border border-amber-500/50 text-amber-300 text-xs font-medium shadow-lg backdrop-blur-md active:scale-95 transition-all"
+            title="แตะเพื่อเพิ่มแสงสว่างกล้องทันที"
+          >
+            <Sun className="w-3.5 h-3.5 text-amber-400" />
+            <span>เร่งแสงกล้อง: {brightnessBoost > 1.0 ? `+${Math.round((brightnessBoost - 1) * 100)}%` : 'ปกติ'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleFlashlight}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium shadow-lg backdrop-blur-md active:scale-95 transition-all ${
+              (hasTorch ? torchOn : spotlightOn)
+                ? 'bg-yellow-950/80 border-yellow-400 text-yellow-300'
+                : 'bg-black/85 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+            title="เปิด/ปิดไฟฉายสปอตไลท์"
+          >
+            <Zap className="w-3.5 h-3.5 text-yellow-400" />
+            <span>{(hasTorch ? torchOn : spotlightOn) ? 'ไฟฉาย: เปิด' : 'เปิดไฟฉาย'}</span>
+          </button>
         </div>
 
         {cameraError && !selectedSpotImage && (
-          <div className="mt-2.5 max-w-sm p-2.5 bg-red-950/90 border border-red-800 rounded-xl text-center text-xs text-red-200 pointer-events-auto shadow-lg">
-            {cameraError}
+          <div className="mt-2.5 max-w-sm p-3 bg-red-950/90 border border-red-800 rounded-xl text-center text-xs text-red-200 pointer-events-auto shadow-lg flex flex-col items-center gap-2">
+            <p>{cameraError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                sounds.playClick();
+                setSelectedSpotImage(SAMPLE_SCHOOL_SPOTS[0].imageUrl);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition-colors"
+            >
+              🕯️ แตะเพื่อใช้ฉากจำลองห้องเรียน (กดถ่ายรูปได้ทันที)
+            </button>
           </div>
         )}
       </div>
@@ -424,6 +581,7 @@ export const ARCamera: React.FC<ARCameraProps> = ({
         <div className="flex items-center gap-2">
           {/* Virtual Spots Button */}
           <button
+            type="button"
             onClick={() => {
               sounds.playClick();
               setShowVirtualSpots(!showVirtualSpots);
@@ -436,6 +594,7 @@ export const ARCamera: React.FC<ARCameraProps> = ({
 
           {/* Upload Button */}
           <button
+            type="button"
             onClick={() => {
               sounds.playClick();
               fileInputRef.current?.click();
@@ -448,6 +607,7 @@ export const ARCamera: React.FC<ARCameraProps> = ({
 
           {selectedSpotImage && (
             <button
+              type="button"
               onClick={() => {
                 sounds.playClick();
                 setSelectedSpotImage(null);
@@ -462,6 +622,7 @@ export const ARCamera: React.FC<ARCameraProps> = ({
         {/* Shutter / Capture Button */}
         <div className="flex items-center justify-center">
           <button
+            type="button"
             disabled={isAnalyzing}
             onClick={handleCapture}
             className={`group relative p-1 rounded-full transition-transform active:scale-90 ${
@@ -470,10 +631,10 @@ export const ARCamera: React.FC<ARCameraProps> = ({
             title="กดเพื่อสแกนวิญญาณในวัตถุ"
           >
             {/* Outer Pulsing Glow */}
-            <div className="absolute inset-0 rounded-full bg-red-600/30 animate-ping opacity-60" />
-            <div className="relative w-20 h-20 rounded-full border-4 border-red-500/80 flex items-center justify-center bg-black/90 shadow-[0_0_30px_rgba(239,68,68,0.5)] group-hover:scale-105 group-hover:border-red-400 transition-all">
-              <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-red-700 via-red-600 to-rose-500 flex items-center justify-center text-white shadow-inner">
-                <Camera className="w-7 h-7 drop-shadow-md" />
+            <div className="absolute inset-0 rounded-full bg-red-600/30 animate-ping opacity-60 pointer-events-none" />
+            <div className="relative w-20 h-20 rounded-full border-4 border-red-500/80 flex items-center justify-center bg-black/90 shadow-[0_0_30px_rgba(239,68,68,0.5)] group-hover:scale-105 group-hover:border-red-400 transition-all pointer-events-none">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-red-700 via-red-600 to-rose-500 flex items-center justify-center text-white shadow-inner pointer-events-none">
+                <Camera className="w-7 h-7 drop-shadow-md pointer-events-none" />
               </div>
             </div>
           </button>
