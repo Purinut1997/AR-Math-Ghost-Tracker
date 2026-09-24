@@ -1,0 +1,9 @@
+{
+  "name": "AR Math Ghost Tracker: ตำนานสมการซ่อนแอบ",
+  "description": "เกม AR แนวสยองขวัญลึกลับที่เป็นมิตรกับเด็ก สแกนสิ่งของในโลกจริงตามหาวิญญาณและแก้คำสาปสมการคณิตศาสตร์",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

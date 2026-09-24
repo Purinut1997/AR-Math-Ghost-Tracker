@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #030712;
+    color: #f1f5f9;
+    overflow: hidden;
+  }
+}
+
+/* Horror Film Vignette effect */
+.horror-vignette {
+  background: radial-gradient(
+    circle at center,
+    transparent 25%,
+    rgba(0, 0, 0, 0.45) 55%,
+    rgba(2, 6, 23, 0.88) 85%,
+    rgba(0, 0, 0, 0.98) 100%
+  );
+  pointer-events: none;
+}
+
+/* Horror Film Camera Tint & Grading */
+.horror-grade {
+  filter: contrast(135%) brightness(78%) saturate(75%) hue-rotate(-10deg);
+}
+
+/* Eerie Flashlight spotlight beam in camera */
+.flashlight-spotlight {
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(255, 255, 240, 0.14) 0%,
+    rgba(140, 255, 200, 0.05) 30%,
+    transparent 65%
+  );
+  pointer-events: none;
+}
+
+/* Creepy Fog drift animation */
+@keyframes fogDrift {
+  0% {
+    transform: translate(-10%, -5%) scale(1);
+    opacity: 0.18;
+  }
+  50% {
+    transform: translate(5%, 3%) scale(1.08);
+    opacity: 0.32;
+  }
+  100% {
+    transform: translate(-10%, -5%) scale(1);
+    opacity: 0.18;
+  }
+}
+
+.horror-fog {
+  animation: fogDrift 16s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* VHS Glitch / Tape distortion flicker */
+@keyframes vhsFlicker {
+  0% { opacity: 0.98; }
+  49% { opacity: 0.98; }
+  50% { opacity: 0.88; }
+  52% { opacity: 0.98; }
+  85% { opacity: 0.98; }
+  86% { opacity: 0.75; }
+  88% { opacity: 0.98; }
+  100% { opacity: 0.98; }
+}
+
+.vhs-flicker {
+  animation: vhsFlicker 4s infinite linear;
+}
+
+/* Spooky Ghost Floating glow */
+@keyframes spookyFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+    filter: drop-shadow(0 0 18px rgba(16, 185, 129, 0.5));
+  }
+  50% {
+    transform: translateY(-8px) rotate(-1.5deg);
+    filter: drop-shadow(0 0 28px rgba(239, 68, 68, 0.45));
+  }
+}
+
+.spooky-float {
+  animation: spookyFloat 3.5s ease-in-out infinite;
+}
+
+/* Jumpscare violent tremor & glitch shockwave */
+@keyframes jumpscareShake {
+  0% { transform: translate(0, 0) scale(1.06); filter: contrast(200%) brightness(150%); }
+  15% { transform: translate(-8px, 6px) scale(1.08); filter: invert(0.2) hue-rotate(90deg); }
+  30% { transform: translate(10px, -7px) scale(1.04); }
+  45% { transform: translate(-7px, -4px) scale(1.02); }
+  60% { transform: translate(5px, 5px) scale(1.01); }
+  75% { transform: translate(-3px, 2px) scale(1); }
+  100% { transform: translate(0, 0) scale(1); filter: none; }
+}
+
+.jumpscare-shake {
+  animation: jumpscareShake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes glitchFlash {
+  0% { opacity: 0.85; }
+  20% { opacity: 0.2; }
+  40% { opacity: 0.9; }
+  60% { opacity: 0.1; }
+  80% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
+.glitch-flash {
+  animation: glitchFlash 0.4s ease-out forwards;
+}
